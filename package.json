@@ -1,0 +1,19 @@
+{
+  "name": "capture-web-images",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chrome extension that captures every image loaded on a page and lets you filter, select, and download them as a ZIP.",
+  "scripts": {
+    "dev": "node esbuild.config.mjs --watch",
+    "build": "node esbuild.config.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.270",
+    "esbuild": "^0.23.0",
+    "typescript": "^5.5.0"
+  },
+  "dependencies": {
+    "fflate": "^0.8.2"
+  }
+}
