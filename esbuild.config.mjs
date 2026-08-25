@@ -1,5 +1,6 @@
 import { build, context } from 'esbuild';
 import { cp, rm, mkdir } from 'node:fs/promises';
+import { watch as watchFs } from 'node:fs';
 
 const watch = process.argv.includes('--watch');
 
@@ -12,7 +13,7 @@ const buildOptions = {
   outdir: 'dist',
   bundle: true,
   format: 'iife',
-  target: 'chrome110',
+  target: 'chrome114',
   sourcemap: true,
   logLevel: 'info',
 };
@@ -24,6 +25,22 @@ async function copyStaticFiles() {
   await cp('src/panel.css', 'dist/panel.css');
 }
 
+function watchStaticFiles() {
+  let timer;
+  const rerun = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      copyStaticFiles()
+        .then(() => console.log('[esbuild] static files copied'))
+        .catch((err) => console.error('[esbuild] static file copy failed', err));
+    }, 100);
+  };
+
+  watchFs('public', { recursive: true }, rerun);
+  watchFs('src/panel.html', rerun);
+  watchFs('src/panel.css', rerun);
+}
+
 async function main() {
   await rm('dist', { recursive: true, force: true });
   await copyStaticFiles();
@@ -31,6 +48,7 @@ async function main() {
   if (watch) {
     const ctx = await context(buildOptions);
     await ctx.watch();
+    watchStaticFiles();
     console.log('[esbuild] watching for changes...');
   } else {
     await build(buildOptions);

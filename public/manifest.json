@@ -3,6 +3,7 @@
   "name": "Capture Web Images",
   "version": "0.1.0",
   "description": "Captures every image loaded on a page and lets you filter, select, and download them as a ZIP.",
+  "minimum_chrome_version": "114",
   "permissions": ["sidePanel", "storage"],
   "background": {
     "service_worker": "background.js"
