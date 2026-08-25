@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Claude Code personal overrides
+.claude/settings.local.json
+
+# VS Code — keep shared settings, ignore personal
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# OS
+Thumbs.db
+Desktop.ini
