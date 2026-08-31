@@ -114,6 +114,9 @@ Work one stage at a time. Do not implement a later stage unless asked.
 - Async `chrome.*` APIs: use promises, not callbacks
 - Writes to `storage.session` must be serialized (queue or debounce) — concurrent
   writes from rapid image loads will clobber each other
+- `host_permissions` must stay `http://*/*` + `https://*/*`, never `<all_urls>` —
+  the narrower pair covers every capturable image without also matching
+  `file://`, `ftp://` and extension/chrome-internal schemes
 
 ## Language
 
