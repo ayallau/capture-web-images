@@ -6,9 +6,13 @@ export interface ImageRecord {
   byteSize: number | null;
   /** null means "unknown", not "generic binary" — stage 7 falls back to the URL extension, never a fabricated MIME type. */
   mimeType: string | null;
-  source: ImageSource;
+  /** Which capture path(s) produced this record — a merged record holds both, and network-only is why altText/width/height are null. */
+  source: ImageSource[];
   fileName: string | null;
   altText: string | null;
+  /** Rendered size from getBoundingClientRect(), DOM-only — null on a network-only record. Fallback filter signal when byteSize is null (304s, chunked transfer). */
+  width: number | null;
+  height: number | null;
   /**
    * The page the image was loaded on. tabId dies with the tab, so this is
    * captured at record-creation time instead. Network captures (background.ts)
@@ -18,7 +22,14 @@ export interface ImageRecord {
    * the DOM value wins.
    */
   sourceUrl: string | null;
-  /** HTTP status of the response. Needed to tell a valid 304 (cached, no body/headers) apart from a genuinely broken fetch when byteSize/mimeType are null. */
-  statusCode: number;
+  /** HTTP status of the response. null on a DOM-only record (e.g. a data: URL, or a network capture that hasn't arrived yet) — there's no response to report a status for. */
+  statusCode: number | null;
   capturedAt: number;
 }
+
+/**
+ * What content.ts sends via chrome.runtime.sendMessage. Same shape as ImageRecord
+ * minus tabId — the content script runs inside the page, not the extension, so it
+ * has no way to know its own tabId; background.ts fills it in from the message sender.
+ */
+export type DomImageCapture = Omit<ImageRecord, 'tabId'>;

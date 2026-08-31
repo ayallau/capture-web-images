@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "Captures every image loaded on a page and lets you filter, select, and download them as a ZIP.",
   "minimum_chrome_version": "114",
-  "permissions": ["sidePanel", "storage", "webRequest"],
+  "permissions": ["sidePanel", "storage", "webRequest", "scripting"],
   "host_permissions": ["http://*/*", "https://*/*"],
   "background": {
     "service_worker": "background.js"
@@ -13,7 +13,8 @@
     {
       "matches": ["http://*/*", "https://*/*"],
       "js": ["content.js"],
-      "run_at": "document_idle"
+      "run_at": "document_idle",
+      "all_frames": true
     }
   ],
   "side_panel": {
