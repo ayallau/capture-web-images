@@ -18,5 +18,7 @@ export interface ImageRecord {
    * the DOM value wins.
    */
   sourceUrl: string | null;
+  /** HTTP status of the response. Needed to tell a valid 304 (cached, no body/headers) apart from a genuinely broken fetch when byteSize/mimeType are null. */
+  statusCode: number;
   capturedAt: number;
 }

@@ -41,6 +41,7 @@ chrome.webRequest.onHeadersReceived.addListener(
       fileName: extractFileName(details.url),
       altText: null,
       sourceUrl: details.initiator ?? null,
+      statusCode: details.statusCode,
       capturedAt: Date.now(),
     };
 

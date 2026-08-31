@@ -57,6 +57,23 @@ and `chrome.storage.session`.
 
 Prefix every `console.log` with its context: `[BG]`, `[CS]`, `[PANEL]`.
 
+## Inline SVG is a first-class source (stage 3)
+
+Measured on a real page: 86 `<img>` tags, 251 inline `<svg>`, 35 CSS
+backgrounds, 0 `data:` URLs — and only 3 of the SVGs showed up in network
+capture. Inline SVG is not edge-case content; it's the majority of what's
+on the page. `content.ts` must scan for it as a primary source, same as
+`<img>`, not defer it to stage 8.
+
+- A `<svg>` nested inside another `<svg>` counts once, not once per level —
+  dedupe by walking only top-level `<svg>` elements, don't count every
+  `<svg>` match a naive `querySelectorAll('svg')` returns.
+- Inline SVG has no `byteSize` — there's no network response to read a
+  `Content-Length` from. Capture rendered `width`/`height` from
+  `getBoundingClientRect()` on the record instead, so stage 6's size
+  filter has a dimension-based signal to work with (most inline SVGs are
+  UI icons and should be filterable the same way tracking pixels are).
+
 ## MV3 constraints — these shaped the architecture
 
 1. **No `eval` / `new Function`** — CSP blocks it. Vet dependencies for internal use of it.
@@ -75,6 +92,23 @@ Try in order, per image, until one succeeds:
 
 Failures must be surfaced to the user as a count, never swallowed silently.
 
+**Signed/expiring URLs:** several CDN patterns embed a short-lived signature
+in the URL and 403 once it expires — Meta/Instagram (`oe=` hex expiry) and
+AWS CloudFront (`Expires` + `Signature` + `Key-Pair-Id` query params) are
+the two known so far. Both expire within minutes to hours. On such sites
+step 1 isn't just the CORS-friendly first try — it's the *only* step likely
+to succeed, because it's the only one hitting the correct cache partition;
+steps 2 and 3 go to the network with an already-expired URL and will 403.
+If the user waits too long before exporting, failures on these sites are
+expected, not a bug. The failure message shown to the user should say so
+(e.g. distinguish "link expired" from a generic fetch failure) rather than
+reading as broken.
+
+These CDN paths are also often opaque hashes with no file extension at all
+(e.g. `/files/a/a3/a3f3a49...`) — another reason the ZIP filename's
+extension must be derived from `mimeType` at export time, never from the
+URL path.
+
 ## Shared data model
 
 All three contexts read and write the same record shape. It lives in
@@ -84,9 +118,26 @@ silent bug in this project.
 
 ## Known edge cases (stage 8, not before)
 
-`data:` URLs, `srcset`, inline SVG, CSS `background-image`, iframes
-(`all_frames: true`), sites with Referer/hotlink protection,
-`Cache-Control: no-store`, tracking pixels and spacers (minimum size filter).
+`data:` URLs, `srcset`, CSS `background-image`, iframes (`all_frames: true`),
+sites with Referer/hotlink protection, `Cache-Control: no-store`, tracking
+pixels and spacers (minimum size filter).
+
+Inline SVG is no longer on this list — see "Inline SVG is a first-class
+source" above. It's handled at stage 3, not stage 8.
+
+- Chrome classifies tracking beacons as type `"image"` even when the server
+  returns `text/html`. Stage 6 must filter on actual `mimeType`, not on
+  Chrome's resource type.
+- ~15% of captures on ad-heavy sites are 1x1 tracking pixels (42 bytes).
+  Minimum size filter is not optional.
+- 304 Not Modified responses are valid cached images with no body and no
+  `Content-Length`/`Content-Type` headers — `byteSize`/`mimeType` end up
+  `null`. Distinguish these from genuinely broken responses via
+  `statusCode`, not by treating null fields as failure.
+- CSS `background-image` URLs already arrive through `webRequest` like any
+  other image request — the content script only adds context (which
+  element, nearby text), it doesn't add coverage. So this item of stage 8
+  is a metadata improvement, not a coverage gap.
 
 ## Build stages
 
