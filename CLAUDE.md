@@ -57,22 +57,24 @@ and `chrome.storage.session`.
 
 Prefix every `console.log` with its context: `[BG]`, `[CS]`, `[PANEL]`.
 
-## Inline SVG is a first-class source (stage 3)
+## Inline SVG — deferred to stage 8
 
-Measured on a real page: 86 `<img>` tags, 251 inline `<svg>`, 35 CSS
-backgrounds, 0 `data:` URLs — and only 3 of the SVGs showed up in network
-capture. Inline SVG is not edge-case content; it's the majority of what's
-on the page. `content.ts` must scan for it as a primary source, same as
-`<img>`, not defer it to stage 8.
+Measured across three real sites, inline `<svg>` outnumbers `<img>` by
+2-8x (251/86, 42/26, 64/30), while only a handful of SVGs ever appear in
+network capture. But almost all of them are UI icons — arrows, hearts,
+close buttons — not content anyone would want to download. Capturing them
+at stage 3 would leave the panel list roughly 75% chrome.
 
-- A `<svg>` nested inside another `<svg>` counts once, not once per level —
-  dedupe by walking only top-level `<svg>` elements, don't count every
-  `<svg>` match a naive `querySelectorAll('svg')` returns.
-- Inline SVG has no `byteSize` — there's no network response to read a
-  `Content-Length` from. Capture rendered `width`/`height` from
-  `getBoundingClientRect()` on the record instead, so stage 6's size
-  filter has a dimension-based signal to work with (most inline SVGs are
-  UI icons and should be filterable the same way tracking pixels are).
+Deferred to stage 8. When it is implemented:
+
+- A `<svg>` nested inside another counts once, not once per level — walk
+  top-level `<svg>` elements only, don't take every match a naive
+  `querySelectorAll('svg')` returns.
+- Inline SVG has no `byteSize` — there is no network response to read a
+  `Content-Length` from, so the stage 6 size filter cannot reach it on
+  bytes. It needs the dimension signal described under "Shared data model".
+- `<use href="#id">` pointing at an external sprite serializes to nothing.
+- SVG that depends on the page's stylesheet renders broken once extracted.
 
 ## MV3 constraints — these shaped the architecture
 
@@ -116,14 +118,37 @@ All three contexts read and write the same record shape. It lives in
 inline — mismatched field names between writer and reader are the most likely
 silent bug in this project.
 
+`ImageRecord` carries rendered `width`/`height` from
+`getBoundingClientRect()`, populated by the content script. This is not
+SVG-specific: many network records come back with `byteSize: 0` (304
+responses) or `null` (chunked transfer), so the stage 6 filter cannot rely
+on bytes alone. Dimensions are the fallback signal.
+
+### Merge rules (network record + DOM record, same URL)
+
+Match on URL. The content script must read `img.currentSrc`, not `img.src` —
+when `srcset` is present, `src` reports the markup default while the browser
+actually loaded something else.
+
+- DOM wins: `sourceUrl` (full page URL beats `initiator`'s origin-only
+  value), `altText`, `width`, `height`
+- Network wins: `byteSize`, `mimeType`, `statusCode`
+- `capturedAt`: keep the earlier of the two
+- A non-null value always beats `null`, even when it comes from the
+  losing side
+
+A merged record came from both sources, so `source` can no longer hold a
+single value — use `('network' | 'dom')[]`. Knowing an image was
+network-only is what explains why it has no alt text.
+
 ## Known edge cases (stage 8, not before)
 
 `data:` URLs, `srcset`, CSS `background-image`, iframes (`all_frames: true`),
 sites with Referer/hotlink protection, `Cache-Control: no-store`, tracking
 pixels and spacers (minimum size filter).
 
-Inline SVG is no longer on this list — see "Inline SVG is a first-class
-source" above. It's handled at stage 3, not stage 8.
+Inline SVG belongs here too — see "Inline SVG — deferred to stage 8" above
+for the measurements and the specific traps.
 
 - Chrome classifies tracking beacons as type `"image"` even when the server
   returns `text/html`. Stage 6 must filter on actual `mimeType`, not on
@@ -143,8 +168,8 @@ source" above. It's handled at stage 3, not stage 8.
 
 Work one stage at a time. Do not implement a later stage unless asked.
 
-- [ ] 1. Skeleton: `manifest.json`, build pipeline, Side Panel opens
-- [ ] 2. Capture v1: `webRequest` only, log to console
+- [x] 1. Skeleton: `manifest.json`, build pipeline, Side Panel opens
+- [x] 2. Capture v1: `webRequest` only, log to console
 - [ ] 3. Capture v2: content script + `MutationObserver`, merge sources
 - [ ] 4. State: `storage.session` per tab, dedupe by URL, reset on navigation
 - [ ] 5. Panel UI: thumbnail + text + size list
@@ -154,7 +179,7 @@ Work one stage at a time. Do not implement a later stage unless asked.
 - [ ] 9. Optional advanced mode: `chrome.debugger` toggle, off by default
 - [ ] 10. Icons, settings screen, Web Store packaging
 
-**Current stage: 1**
+**Current stage: 3**
 
 ## Conventions
 
