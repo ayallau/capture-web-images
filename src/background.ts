@@ -29,6 +29,8 @@ function extractFileName(url: string): string | null {
 
 chrome.webRequest.onHeadersReceived.addListener(
   (details) => {
+    if (details.tabId < 0) return;
+
     const byteSizeHeader = getHeader(details.responseHeaders, 'content-length');
     const mimeTypeHeader = getHeader(details.responseHeaders, 'content-type');
 

@@ -83,6 +83,7 @@ Deferred to stage 8. When it is implemented:
 3. **No `URL.createObjectURL` in the service worker** — no DOM there. All fetching, zipping and downloading happens in `panel.ts`.
 4. **No in-memory state** — the service worker restarts from scratch on wake. All capture state goes to `chrome.storage.session`, keyed by `tabId`.
 5. **`webRequest` is metadata-only** — gives URL, headers, `Content-Length`, MIME type. Never the response body. This is why we re-fetch at export time.
+6. **`details.tabId` can be negative** — `chrome.webRequest` reports a negative `tabId` (typically `-1`) for requests not owned by any tab: a site's own service worker, prefetch, browser-internal requests. `background.ts` drops any request with `tabId < 0` at capture time — stage 4 keys all state by `tabId`, and a negative one has no panel that could ever display it, so capturing it only pollutes storage.
 
 ## Fetch fallback chain (export time)
 
@@ -163,6 +164,8 @@ for the measurements and the specific traps.
   other image request — the content script only adds context (which
   element, nearby text), it doesn't add coverage. So this item of stage 8
   is a metadata improvement, not a coverage gap.
+- Requests from other open tabs arrive in the same listener. Per-tab state
+  isolation in stage 4 must be verified, not assumed.
 
 ## Build stages
 
