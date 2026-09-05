@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node esbuild.config.mjs --watch",
     "build": "node esbuild.config.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "pack": "node scripts/pack.mjs"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.270",
