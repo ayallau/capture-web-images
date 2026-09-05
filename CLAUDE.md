@@ -218,7 +218,7 @@ Work one stage at a time. Do not implement a later stage unless asked.
 - [x] 1. Skeleton: `manifest.json`, build pipeline, Side Panel opens
 - [x] 2. Capture v1: `webRequest` only, log to console
 - [x] 3. Capture v2: content script + `MutationObserver`, merge sources
-- [ ] 4. State: `storage.session` per tab, dedupe by URL, reset on navigation
+- [x] 4. State: `storage.session` per tab, dedupe by URL, reset on navigation
 - [ ] 5. Panel UI: thumbnail + text + size list
 - [ ] 6. Filters: size range, free-text search, multi-select
 - [ ] 7. Export: fetch chain, ZIP via fflate, download, failure reporting
@@ -226,7 +226,7 @@ Work one stage at a time. Do not implement a later stage unless asked.
 - [ ] 9. Optional advanced mode: `chrome.debugger` toggle, off by default
 - [ ] 10. Icons, settings screen, Web Store packaging
 
-**Current stage: 4**
+**Current stage: 5**
 
 ## Conventions
 
