@@ -22,14 +22,27 @@ export interface ImageRecord {
    * the DOM value wins.
    */
   sourceUrl: string | null;
+  /**
+   * The top-level page the user is actually on, from sender.tab.url — not the same as
+   * sourceUrl. Inside an iframe, sourceUrl is the iframe's own URL (e.g. Facebook renders
+   * through an fbsbx.com iframe), while pageUrl is what the user believes they're looking
+   * at. DOM-only until merged with a network record for the same URL (DOM wins, same as
+   * sourceUrl/altText/width/height) — a network capture has no way to know the top-level
+   * tab URL on its own.
+   */
+  pageUrl: string | null;
   /** HTTP status of the response. null on a DOM-only record (e.g. a data: URL, or a network capture that hasn't arrived yet) — there's no response to report a status for. */
   statusCode: number | null;
+  /** Per-tab counter in capture order, assigned once when a URL is first seen (merges keep the original). capturedAt can collide within a millisecond; this gives a definite order, and is stage 7's ZIP filename fallback when fileName is null. */
+  seq: number;
   capturedAt: number;
 }
 
 /**
- * What content.ts sends via chrome.runtime.sendMessage. Same shape as ImageRecord
- * minus tabId — the content script runs inside the page, not the extension, so it
- * has no way to know its own tabId; background.ts fills it in from the message sender.
+ * What content.ts sends via chrome.runtime.sendMessage. Same shape as ImageRecord minus
+ * tabId, pageUrl, and seq — the content script runs inside the page, not the extension,
+ * so it can't know its own tab id, the top-level tab URL (only background.ts's message
+ * sender can see that), or where it falls in the tab's capture sequence. background.ts
+ * fills all three in when it receives the message.
  */
-export type DomImageCapture = Omit<ImageRecord, 'tabId'>;
+export type DomImageCapture = Omit<ImageRecord, 'tabId' | 'pageUrl' | 'seq'>;

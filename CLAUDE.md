@@ -125,6 +125,13 @@ SVG-specific: many network records come back with `byteSize: 0` (304
 responses) or `null` (chunked transfer), so the stage 6 filter cannot rely
 on bytes alone. Dimensions are the fallback signal.
 
+`seq: number` — per-tab counter in capture order, assigned once when a URL
+is first seen; merges keep the original. `capturedAt` can collide within a
+millisecond, so this gives a definite order, and stage 7 uses it as the ZIP
+filename fallback when `fileName` is null. Derived from the hydrated
+records (max existing seq), never from a separate counter — a separate one
+desyncs after the service worker sleeps.
+
 ### Merge rules (network record + DOM record, same URL)
 
 Match on URL. The content script must read `img.currentSrc`, not `img.src` —
@@ -133,6 +140,11 @@ actually loaded something else.
 
 - DOM wins: `sourceUrl` (full page URL beats `initiator`'s origin-only
   value), `altText`, `width`, `height`
+- DOM wins: `pageUrl` — the top-level page the user is actually on, from
+  `sender.tab.url`. Not the same as `sourceUrl`: inside an iframe
+  `sourceUrl` is the iframe's own URL (Facebook renders through an
+  fbsbx.com iframe) while `pageUrl` is what the user believes they're
+  looking at. The panel and the CSV want `pageUrl`.
 - Network wins: `byteSize`, `mimeType`, `statusCode`
 - `capturedAt`: keep the earlier of the two
 - A non-null value always beats `null`, even when it comes from the
@@ -141,6 +153,26 @@ actually loaded something else.
 A merged record came from both sources, so `source` can no longer hold a
 single value — use `('network' | 'dom')[]`. Knowing an image was
 network-only is what explains why it has no alt text.
+
+### Storage shape (stage 4)
+
+`chrome.storage.session` keys each tab as `tab:<id>`, holding
+`{ origin: string | null, records: Record<url, ImageRecord> }` — not a bare
+records object. The panel reads `.records`, never the stored value directly.
+`origin` is persisted alongside the records (not kept only in memory) so a
+service worker that wakes mid-session compares against the origin it last
+knew about, rather than an in-memory value that resets to nothing on every
+sleep.
+
+The in-memory `Map<tabId, Map<url, ImageRecord>>` is the source of truth
+while the service worker is alive; storage is a debounced mirror of it,
+never the other way around. Merges are synchronous with no `await` in the
+middle, so JS's single thread gives atomicity for free. Flushes are
+debounced ~300ms, single-flight per tab with a trailing flush: if a write
+is already in flight the tab is marked dirty rather than starting a second
+one, since a slow earlier write could otherwise land after a faster later
+one and clobber it. A per-tab generation counter guards against a flush
+scheduled before an origin change landing after it.
 
 ## Known edge cases (stage 8, not before)
 
@@ -166,6 +198,18 @@ for the measurements and the specific traps.
   is a metadata improvement, not a coverage gap.
 - Requests from other open tabs arrive in the same listener. Per-tab state
   isolation in stage 4 must be verified, not assumed.
+- `webRequest` fires on 3xx redirects too. A 3xx has no body and is never an
+  image. Stage 6 filter: exclude `statusCode >= 300` except 304, which IS a
+  valid cached image.
+- Ad-network iframes generate heavy cookie-sync traffic typed as `"image"`.
+  On Pinterest, ~30 of 76 records came from `eus.rubiconproject.com`, not
+  the page. Filtering on `sourceUrl` origin is more precise than a size
+  threshold.
+- Lazy-loading sites (Pinterest) insert `<img>` with `currentSrc` still
+  empty. `content.ts` falls back to `src` and attaches a one-shot `load`
+  listener; without this, zero DOM captures on that site.
+- Multi-frame pages send the same URL from several frames. `applyCapture`
+  skips the write when the merge produces no change.
 
 ## Build stages
 
