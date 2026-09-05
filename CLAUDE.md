@@ -21,12 +21,12 @@ download them from a Side Panel.
 
 ## Decisions already made — do not re-propose these
 
-| Decision | Rejected alternative | Reason |
-|---|---|---|
-| esbuild | CRXJS, WXT, Vite | 3 entry points, no framework. Extra abstraction not justified. |
-| Side Panel | Popup, full tab | Popup closes on outside click, breaking multi-select. Panel also has a DOM, which the service worker lacks. |
-| Collect URLs + re-fetch | `chrome.debugger` | Debugger shows a permanent warning banner and conflicts with DevTools. Violates the hard UX requirement below. |
-| No UI framework | React, Svelte | Revisit only if the panel list logic becomes unmanageable. |
+| Decision                | Rejected alternative | Reason                                                                                                         |
+| ----------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------- |
+| esbuild                 | CRXJS, WXT, Vite     | 3 entry points, no framework. Extra abstraction not justified.                                                 |
+| Side Panel              | Popup, full tab      | Popup closes on outside click, breaking multi-select. Panel also has a DOM, which the service worker lacks.    |
+| Collect URLs + re-fetch | `chrome.debugger`    | Debugger shows a permanent warning banner and conflicts with DevTools. Violates the hard UX requirement below. |
+| No UI framework         | React, Svelte        | Revisit only if the panel list logic becomes unmanageable.                                                     |
 
 ## Hard UX requirement
 
@@ -35,6 +35,7 @@ side panel. No refreshing, no toggles, no DevTools, no external programs.
 Any proposed solution that adds a user step is wrong by default.
 
 Consequences:
+
 - Capture starts at service worker boot, not when the panel opens.
 - On `onInstalled`, inject the content script into already-open tabs via
   `chrome.scripting.executeScript` — otherwise those tabs need a manual refresh.
@@ -44,12 +45,12 @@ Consequences:
 This is the core of the architecture. Each file runs in a different environment
 with different capabilities. Do not mix them up.
 
-| | `background.ts` | `content.ts` | `panel.ts` |
-|---|---|---|---|
-| Environment | Service Worker | Injected into every page | Side Panel HTML page |
-| DOM access | No | Yes (the page's DOM) | Yes (its own DOM) |
-| Lifetime | Sleeps after ~30s idle | Lives with the page | Lives while panel is open |
-| Debug at | `chrome://extensions` -> "Service worker" | F12 on the page | Right-click in panel -> Inspect |
+|                | `background.ts`                              | `content.ts`                                 | `panel.ts`                                   |
+| -------------- | -------------------------------------------- | -------------------------------------------- | -------------------------------------------- |
+| Environment    | Service Worker                               | Injected into every page                     | Side Panel HTML page                         |
+| DOM access     | No                                           | Yes (the page's DOM)                         | Yes (its own DOM)                            |
+| Lifetime       | Sleeps after ~30s idle                       | Lives with the page                          | Lives while panel is open                    |
+| Debug at       | `chrome://extensions` -> "Service worker"    | F12 on the page                              | Right-click in panel -> Inspect              |
 | Responsibility | `chrome.webRequest` capture, state ownership | `MutationObserver`, DOM scan, alt/title text | Render, filter, select, fetch, ZIP, download |
 
 They do not share memory. They communicate via `chrome.runtime.sendMessage`
@@ -79,7 +80,7 @@ Deferred to stage 8. When it is implemented:
 ## MV3 constraints — these shaped the architecture
 
 1. **No `eval` / `new Function`** — CSP blocks it. Vet dependencies for internal use of it.
-2. **No remotely hosted code** — no CDN `<script>`. Everything bundled. (Fetching *data* over the network is fine.)
+2. **No remotely hosted code** — no CDN `<script>`. Everything bundled. (Fetching _data_ over the network is fine.)
 3. **No `URL.createObjectURL` in the service worker** — no DOM there. All fetching, zipping and downloading happens in `panel.ts`.
 4. **No in-memory state** — the service worker restarts from scratch on wake. All capture state goes to `chrome.storage.session`, keyed by `tabId`.
 5. **`webRequest` is metadata-only** — gives URL, headers, `Content-Length`, MIME type. Never the response body. This is why we re-fetch at export time.
@@ -99,7 +100,7 @@ Failures must be surfaced to the user as a count, never swallowed silently.
 in the URL and 403 once it expires — Meta/Instagram (`oe=` hex expiry) and
 AWS CloudFront (`Expires` + `Signature` + `Key-Pair-Id` query params) are
 the two known so far. Both expire within minutes to hours. On such sites
-step 1 isn't just the CORS-friendly first try — it's the *only* step likely
+step 1 isn't just the CORS-friendly first try — it's the _only_ step likely
 to succeed, because it's the only one hitting the correct cache partition;
 steps 2 and 3 go to the network with an already-expired URL and will 403.
 If the user waits too long before exporting, failures on these sites are
@@ -210,6 +211,28 @@ for the measurements and the specific traps.
   listener; without this, zero DOM captures on that site.
 - Multi-frame pages send the same URL from several frames. `applyCapture`
   skips the write when the merge produces no change.
+
+  ## Panel implementation notes (stage 5)
+
+- **Read from `tab:<id>.records`**, never the stored value directly. The
+  storage entry is `{ origin, records }` — see "Storage shape (stage 4)".
+- **Live updates via `chrome.storage.onChanged`**, not polling. Records
+  arrive in bursts (a scroll can add 30 in one flush), so polling either
+  wastes cycles between bursts or lags behind them. The listener fires
+  exactly when a flush lands.
+- **Thumbnails are `<img src={record.url}>` directly.** No thumbnail
+  generation — the browser renders from its own cache, and the panel is a
+  normal DOM page with no canvas or CORS problem to solve. A broken
+  thumbnail is useful signal rather than a defect: it tells the user in
+  advance which images will likely fail at export (expired signed URL,
+  evicted from cache, `no-store`).
+- **The list will look noisy and that is correct at this stage.** Expect
+  tracking pixels, 200-byte UI icons, ad-network cookie-sync requests.
+  Filtering is stage 6; stage 5 renders everything the store holds.
+- **Virtualize the list** once it exceeds a few hundred entries. Measured
+  captures per page ranged from ~30 to ~150 in a single session, and the
+  count keeps growing while the user browses. Rendering every row eagerly
+  will stall the panel.
 
 ## Build stages
 
